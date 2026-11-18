@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Adoption Signals: does AI use move with cyber attacks and outages?</title>
+  <meta name="description" content="Official and public data on business AI adoption compared with exploited vulnerabilities, AI-software flaws and service outages. Refreshed weekly.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body>
+<header class="hero">
+  <p class="kicker">Correlation study 1 · AI and digital risk</p>
+  <h1>AI Adoption Signals</h1>
+  <p class="hook">As businesses adopt AI, do attacks and outages rise with it?</p>
+  <p class="dek">Business AI use is climbing every month. So are many measures of cyber risk. This site checks
+    whether they actually move <em>together</em>, using only official and public data that refreshes every week.</p>
+  <div class="stats" id="stats"></div>
+  <p class="updated" id="updated"></p>
+  <nav class="toc">
+    <a href="#answer">The short answer</a>
+    <a href="#adoption">AI adoption</a>
+    <a href="#exploited">Exploited flaws</a>
+    <a href="#aisoftware">Flaws in AI software</a>
+    <a href="#reliability">AI service outages</a>
+    <a href="#internet">Internet outages</a>
+    <a href="#method">Method &amp; sources</a>
+  </nav>
+</header>
+
+<main>
+<section id="answer" class="band">
+  <div class="wrap">
+    <p class="act-label">The short answer</p>
+    <h2>Rising together is not the same as moving together</h2>
+    <p class="lead">If two things both grow over time, they will always look linked. The real test is whether the
+      <b>month-to-month changes</b> line up: in months when AI adoption jumps more, do attacks or outages jump more too?
+      The table puts both numbers side by side.</p>
+    <div class="callout" id="verdict"></div>
+    <div class="tablewrap"><table id="scorecard" class="data"></table></div>
+    <p class="note">ρ (rho) is Spearman's rank correlation: +1 means they always move up together, 0 means no pattern,
+      −1 means opposite. "No reliable link" means the pattern in the changes could easily be chance (p ≥ 0.05)
+      or is too small to matter (|ρ| &lt; 0.1). Each comparison uses only the months both series cover.</p>
+  </div>
+</section>
+
+<section id="adoption">
+  <div class="wrap">
+    <p class="act-label">1 · The baseline</p>
+    <h2>How fast are businesses adopting AI?</h2>
+    <p>Two independent measures. <b>Ramp</b> counts US businesses on its card and bill-pay platform that paid for AI
+      tools that month (monthly since 2023). The <b>Census Bureau</b> asks a representative sample of about 1.2 million
+      US employers every two weeks whether they used AI in the last two weeks.</p>
+    <div class="chart" id="c-ramp"></div>
+    <div class="chart" id="c-btos"></div>
+    <p class="note" id="btos-note"></p>
+  </div>
+</section>
+
+<section id="exploited" class="band">
+  <div class="wrap">
+    <p class="act-label">2 · Cyber attacks</p>
+    <h2>Software flaws that attackers are actually using</h2>
+    <p>The US Cybersecurity and Infrastructure Security Agency (CISA) lists every vulnerability it has evidence of being
+      exploited in real attacks: the <b>Known Exploited Vulnerabilities</b> (KEV) catalogue. It is the closest public,
+      official, regularly updated record of real attacks.</p>
+    <div class="chart" id="c-kev"></div>
+    <h3>Are attackers getting faster?</h3>
+    <p>AI is often said to help attackers turn a published flaw into a working attack sooner. Here is the share of newly
+      listed flaws that were confirmed as exploited within a week of being made public.</p>
+    <div class="chart" id="c-speed"></div>
+    <h3>Exploited flaws in AI tools themselves</h3>
+    <div class="tablewrap"><table id="kev-ai" class="data"></table></div>
+  </div>
+</section>
+
+<section id="aisoftware">
+  <div class="wrap">
+    <p class="act-label">3 · New attack surface</p>
+    <h2>Security flaws found in AI software</h2>
+    <p>Every new vulnerability gets an ID (a CVE) in the US National Vulnerability Database (NVD). We count new CVEs
+      whose description names AI and machine-learning software, from LLM frameworks to model-serving tools.
+      To avoid the "everything is growing" trap, we also show them per 1,000 of all new CVEs.</p>
+    <div class="chart" id="c-aicve"></div>
+    <div class="chart" id="c-aishare"></div>
+    <div class="grid2">
+      <div class="chart small" id="c-kw"></div>
+      <div><h3>Most severe recent examples</h3><ul id="ai-top" class="cvelist"></ul></div>
+    </div>
+  </div>
+</section>
+
+<section id="reliability" class="band">
+  <div class="wrap">
+    <p class="act-label">4 · Service disruptions</p>
+    <h2>Do AI services break down more as use grows?</h2>
+    <p>Incidents posted on the official status pages of AI providers, counted by month. GitHub is included because its
+      Copilot coding assistant is one of the most used AI tools at work.</p>
+    <div class="chart" id="c-status"></div>
+    <p class="note" id="status-note"></p>
+  </div>
+</section>
+
+<section id="internet">
+  <div class="wrap">
+    <p class="act-label">5 · Wider disruptions</p>
+    <h2>Internet outages around the world</h2>
+    <div id="internet-body"></div>
+  </div>
+</section>
+
+<section id="method" class="band">
+  <div class="wrap">
+    <p class="act-label">Method &amp; sources</p>
+    <h2>How this works</h2>
+    <ul class="method">
+      <li><b>Months.</b> Everything is counted by calendar month from January 2023, and only finished months are used.</li>
+      <li><b>Two correlations.</b> "Levels" compares the raw monthly values; "changes" compares month-to-month differences.
+        Only the second can tell a real connection from two trends that just happen to share a direction.</li>
+      <li><b>Chance check.</b> For the changes, we shuffle one series 5,000 times and report how often a shuffled version looks
+        at least as linked (the p-value).</li>
+      <li><b>One fixed comparison.</b> We compare same-month changes only and do not hunt through time lags, which would
+        find patterns by chance.</li>
+      <li><b>Correlation is not cause.</b> Even a reliable link would not show that AI causes attacks; both could respond
+        to something else, such as overall growth in software and cloud use.</li>
+      <li><b>Known limits.</b> KEV records when CISA <em>confirmed</em> exploitation, which can lag the first attack.
+        Keyword matching in NVD will miss some AI flaws and include a few false matches. Status pages are written by the
+        companies themselves, and their practices change. Ramp covers only its own customers. The Census question was
+        reworded in November 2025, so only the new wording is used here.</li>
+    </ul>
+    <h3>Data sources</h3>
+    <ul class="sources" id="sources"></ul>
+    <p class="note">Built by Tamalika · code and data pipeline on <a href="https://github.com/">GitHub</a> · refreshed every Monday.</p>
+  </div>
+</section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+name: Refresh data and publish site
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"     # every Monday 03:17 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write      # to save the OpenAI incident archive and NVD cache
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Download data
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python -m pipeline.fetch
+
+      - name: Save archives (OpenAI incidents, NVD cache)
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/archive
+          if ! git diff --cached --quiet; then
+            git commit -m "Update data archives [skip ci]"
+            git pull --rebase origin main && git push origin HEAD:main
+          fi
+
+      - name: Build site data
+        run: python -m pipeline.build | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Stamp asset versions (so browsers load the latest build)
+        run: sed -i "s/style.css\"/style.css?v=${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}\"/; s/app.js\"/app.js?v=${GITHUB_SHA::7}-${GITHUB_RUN_NUMBER}\"/" site/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
