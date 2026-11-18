@@ -1,93 +1,84 @@
-"""One-off feasibility probe (temporary branch, will be deleted)."""
+"""Second feasibility probe (temporary branch, will be deleted)."""
 import json, os, re, time, datetime as dt
 import requests
 S = requests.Session(); S.headers["User-Agent"] = "ai-adoption-signals probe"
 GH = requests.Session(); GH.headers.update({"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json"})
+CHANGE = re.compile(r"\b(deploy\w*|roll(ed)?[ -]?back|revert\w*|recent change|config(uration)? change|release|rolled out|code change|migration)\b", re.I)
 
-STATUS = {
-  "sentry": ["https://status.sentry.io"], "supabase": ["https://status.supabase.com"],
-  "posthog": ["https://status.posthog.com"], "grafana": ["https://status.grafana.com"],
-  "mattermost": ["https://status.mattermost.com", "https://status.mattermost.cloud"],
-  "calcom": ["https://status.cal.com", "https://cal.openstatus.dev"], "n8n": ["https://status.n8n.cloud", "https://status.n8n.io"],
-  "gitlab": ["https://status.gitlab.com"], "vercel": ["https://www.vercel-status.com"],
-  "netlify": ["https://www.netlifystatus.com"], "cloudflare": ["https://www.cloudflarestatus.com"],
-  "airbyte": ["https://status.airbyte.com"], "appsmith": ["https://status.appsmith.com"],
-  "hasura": ["https://status.hasura.io"], "infisical": ["https://status.infisical.com"],
-  "langfuse": ["https://status.langfuse.com"], "dagster": ["https://dagstercloud.statuspage.io", "https://status.dagster.io"],
-  "metabase": ["https://status.metabase.com"], "zulip": ["https://status.zulip.com"], "discourse": ["https://status.discourse.org"],
-}
-REPOS = {"sentry": "getsentry/sentry", "supabase": "supabase/supabase", "posthog": "PostHog/posthog",
-  "grafana": "grafana/grafana", "mattermost": "mattermost/mattermost", "calcom": "calcom/cal.com",
-  "n8n": "n8n-io/n8n", "airbyte": "airbytehq/airbyte", "appsmith": "appsmithorg/appsmith",
-  "hasura": "hasura/graphql-engine", "infisical": "Infisical/infisical", "langfuse": "langfuse/langfuse",
-  "dagster": "dagster-io/dagster", "metabase": "metabase/metabase", "zulip": "zulip/zulip", "discourse": "discourse/discourse"}
+def safe(f):
+    try: return f()
+    except Exception as e: return {"error": repr(e)[:200]}
 
-def status(url):
-    out = {"url": url}
-    try:
-        r = S.get(url + "/history.json?page=1", timeout=30)
-        if r.ok and "months" in r.text:
-            pages, earliest, n = 1, None, 0
-            while pages <= 40:
-                j = S.get(url + f"/history.json?page={pages}", timeout=30).json()
-                ms = j.get("months") or []
-                if not ms: break
-                for m in ms:
-                    n += len(m.get("incidents") or [])
-                    earliest = f"{m['year']}-{m['name'][:3]}"
-                if all(not m.get("incidents") for m in ms) and pages > 3: break
-                pages += 1; time.sleep(0.5)
-            j1 = S.get(url + "/api/v2/incidents.json", timeout=30).json()
-            sample = [i["name"] for i in j1.get("incidents", [])[:40]]
-            out.update(kind="atlassian", earliest=earliest, incidents=n, pages=pages - 1,
-                       change_words=sum(bool(re.search(r"deploy|rollback|roll back|revert|release|change|config", s, re.I)) for s in sample),
-                       sample=sample[:6])
-            return out
-        r = S.get(url + "/api/v2/incidents.json", timeout=30)
-        if r.ok and "incidents" in r.text:
-            inc = r.json()["incidents"]
-            out.update(kind="statuspage-api-only", n=len(inc), oldest=inc[-1]["created_at"] if inc else None)
-        for feed in ("/history.rss", "/feed.rss", "/rss", "/feed"):
-            f = S.get(url + feed, timeout=30)
-            if f.ok and "<item" in f.text:
-                d = re.findall(r"<pubDate>([^<]+)</pubDate>", f.text)
-                out.update(feed=feed, feed_items=len(d), feed_oldest=d[-1] if d else None); break
-        if "kind" not in out:
-            out.update(kind="unknown", http=r.status_code, server=r.headers.get("server"))
-    except Exception as e:
-        out.update(kind="error", error=repr(e)[:200])
+# 1. PostHog status page: what is it?
+def posthog():
+    out = {}
+    for p in ["/", "/history", "/api/v2/incidents.json", "/history.rss", "/feed.rss", "/rss", "/proxy/status.posthog.com/incidents"]:
+        r = S.get("https://status.posthog.com" + p, timeout=30)
+        out[p] = [r.status_code, r.headers.get("content-type"), re.sub(r"\s+", " ", r.text[:300])]
     return out
 
+# 2. GitLab public production incident tracker
+def gitlab():
+    base = "https://gitlab.com/api/v4/projects/gitlab-com%2Fgl-infra%2Fproduction/issues"
+    first = S.get(base, params={"labels": "incident", "per_page": 3, "order_by": "created_at", "sort": "asc"}, timeout=60)
+    last = S.get(base, params={"labels": "incident", "per_page": 20, "order_by": "created_at", "sort": "desc"}, timeout=60)
+    out = {"status": [first.status_code, last.status_code], "total": last.headers.get("x-total")}
+    if first.ok: out["oldest"] = [(i["created_at"][:10], i["title"][:80]) for i in first.json()]
+    if last.ok:
+        js = last.json()
+        out["recent"] = [(i["created_at"][:10], i["title"][:80]) for i in js[:5]]
+        labs = {}
+        for i in js:
+            for l in i["labels"]:
+                if any(k in l for k in ("RootCause", "Severity", "Service")): labs[l] = labs.get(l, 0) + 1
+        out["labels"] = labs
+    # counts per year via x-total
+    for y in (2023, 2024, 2025, 2026):
+        r = S.get(base, params={"labels": "incident", "per_page": 1, "created_after": f"{y}-01-01", "created_before": f"{y}-12-31"}, timeout=60)
+        out[f"n_{y}"] = r.headers.get("x-total")
+        r = S.get(base, params={"labels": "incident,RootCause::Software-Change", "per_page": 1, "created_after": f"{y}-01-01", "created_before": f"{y}-12-31"}, timeout=60)
+        out[f"n_{y}_rootcause_software_change"] = r.headers.get("x-total")
+    return out
+
+# 3. Change-caused share in status page incident texts (Atlassian history.json)
+def change_share(url, pages=16):
+    by_year = {}
+    for p in range(1, pages + 1):
+        j = S.get(f"{url}/history.json?page={p}", timeout=30).json()
+        for m in j.get("months") or []:
+            for inc in m.get("incidents") or []:
+                y = m["year"]; d = by_year.setdefault(y, [0, 0])
+                d[0] += 1
+                d[1] += bool(CHANGE.search((inc.get("name") or "") + " " + (inc.get("message") or "")))
+        time.sleep(0.5)
+    return {y: {"incidents": a, "change_mentions": b} for y, (a, b) in sorted(by_year.items())}
+
 def gh_count(q):
-    for i in range(5):
-        r = GH.get("https://api.github.com/search/commits", params={"q": q, "per_page": 1}, timeout=60)
-        if r.status_code == 200:
-            time.sleep(2.2); return r.json()["total_count"]
-        time.sleep(30 * (i + 1))
+    for i in range(6):
+        try:
+            r = GH.get("https://api.github.com/search/commits", params={"q": q, "per_page": 1}, timeout=60)
+            if r.status_code == 200:
+                time.sleep(2.5); return r.json()["total_count"]
+        except requests.RequestException:
+            pass
+        time.sleep(20 * (i + 1))
     return None
 
 def repo(full):
-    meta = GH.get(f"https://api.github.com/repos/{full}").json()
-    res = {"repo": full, "pushed": meta.get("pushed_at"), "archived": meta.get("archived"), "rows": []}
-    for y, q1 in [(2023, "01"), (2024, "01"), (2025, "01"), (2025, "07"), (2026, "01"), (2026, "07")]:
-        a = f"{y}-{q1}-01"; b = (dt.date(y, int(q1), 1) + dt.timedelta(days=89)).isoformat()
+    rows = []
+    for a, b in [("2024-01-01", "2024-03-31"), ("2025-01-01", "2025-03-31"), ("2026-01-01", "2026-03-31"), ("2026-07-01", "2026-09-30")]:
         rng = f"committer-date:{a}..{b}"
-        row = {"from": a,
-               "commits": gh_count(f"repo:{full} {rng}"),
-               "ai_claude": gh_count(f'repo:{full} {rng} "co-authored-by: claude"'),
-               "ai_copilot": gh_count(f'repo:{full} {rng} "co-authored-by: copilot"'),
-               "ai_cursor": gh_count(f'repo:{full} {rng} "cursor agent"'),
-               "reverts": gh_count(f'repo:{full} {rng} "this reverts commit"')}
-        res["rows"].append(row)
-        print(full, row, flush=True)
-    return res
+        rows.append({"from": a, "commits": gh_count(f"repo:{full} {rng}"),
+                     "ai_claude": gh_count(f'repo:{full} {rng} "co-authored-by: claude"'),
+                     "revert_word": gh_count(f"repo:{full} {rng} revert")})
+        print(full, rows[-1], flush=True)
+    return rows
 
-out = {"status": {}, "repos": {}}
-for k, urls in STATUS.items():
-    for u in urls:
-        s = status(u); print(k, json.dumps(s)[:400], flush=True)
-        out["status"][k] = s
-        if s["kind"] not in ("unknown", "error"): break
-for k, r in REPOS.items():
-    out["repos"][k] = repo(r)
+out = {}
+out["posthog_status"] = safe(posthog); print("posthog", json.dumps(out["posthog_status"])[:1500], flush=True)
+out["gitlab"] = safe(gitlab); print("gitlab", json.dumps(out["gitlab"])[:2500], flush=True)
+for k, u in [("sentry", "https://status.sentry.io"), ("grafana", "https://status.grafana.com")]:
+    out[f"change_{k}"] = safe(lambda: change_share(u)); print("change", k, out[f"change_{k}"], flush=True)
+for r in ["grafana/mimir", "grafana/loki", "dagster-io/dagster", "PostHog/posthog", "getsentry/sentry"]:
+    out[r] = safe(lambda: repo(r))
 json.dump(out, open("probe_result.json", "w"), indent=1)
