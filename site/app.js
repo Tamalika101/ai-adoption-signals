@@ -10,13 +10,13 @@ function layout(extra = {}) {
   return {
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: { family: "Inter, system-ui, sans-serif", size: 13, color: css("--ink-2") },
-    margin: { l: 56, r: 16, t: 44, b: 44 },
+    margin: { l: 56, r: 16, t: 78, b: 44 },
     hovermode: "x unified",
     hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--rule"), font: { color: css("--ink") } },
     xaxis: { gridcolor: "rgba(0,0,0,0)", linecolor: css("--rule"), tickfont: { color: css("--ink-3") } },
     yaxis: { gridcolor: css("--rule"), zeroline: false, tickfont: { color: css("--ink-3") }, rangemode: "tozero" },
-    legend: { orientation: "h", y: 1.12, x: 0, font: { size: 12 } },
-    title: { font: { family: "Fraunces, Georgia, serif", size: 17, color: css("--ink") }, x: 0, xanchor: "left" },
+    legend: { orientation: "h", y: 1.02, yanchor: "bottom", x: 0, font: { size: 12 } },
+    title: { font: { family: "Fraunces, Georgia, serif", size: 17, color: css("--ink") }, x: 0, xanchor: "left", y: 0.97, yanchor: "top", pad: { l: 4 } },
     ...extra,
   };
 }
@@ -57,7 +57,7 @@ async function main() {
   const stats = [
     rampLast && [`${fmt(rampLast.value, 1)}%`, `of US businesses on Ramp paid for AI in ${monthName(rampLast.month)}` + (rampYearAgo ? ` (${fmt(rampYearAgo.value, 1)}% a year earlier)` : "")],
     btosLast && [`${fmt(btosLast.value, 1)}%`, `of US employers used AI in the two weeks to ${new Date(btosLast.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })} (Census)`],
-    [fmt(kevYear), `software flaws newly confirmed as exploited in ${D.through.slice(0, 4)} so far`],
+    [fmt(kevYear), `software flaws newly confirmed as exploited, Jan–${monthName(D.through).split(" ")[0]} ${D.through.slice(0, 4)}`],
     D.ai_cves && D.ai_cves.total != null && [fmt(D.ai_cves.total), "vulnerabilities in AI software published since Jan 2023"],
   ].filter(Boolean);
   document.getElementById("stats").innerHTML = stats.map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join("");
@@ -74,7 +74,7 @@ async function main() {
 const GROUPS = [
   ["Cyber attacks", ["kev_added", "kev_fast_share", "kev_median_lag", "kev_ransomware_share"]],
   ["Flaws in AI software", ["ai_cves", "ai_cves_per_1000"]],
-  ["AI service disruptions", ["claude_incidents", "claude_major", "github_incidents", "github_focus", "openai_incidents"]],
+  ["AI service disruptions", ["claude_incidents", "claude_major", "github_incidents", "github_major", "github_focus", "openai_incidents"]],
   ["Internet outages", ["internet_outages", "internet_outages_cyber"]],
 ];
 
@@ -101,7 +101,7 @@ function scorecard(D) {
   const trendy = tested.filter((c) => Math.abs(c.level_rho) >= 0.5 && c.reading === "no reliable link");
   let v = `<b>${linked.length} of ${tested.length}</b> measures show a reliable month-to-month link with AI adoption (Ramp).`;
   if (linked.length) v += ` Linked: ${linked.map((c) => `${esc(c.metric_label.toLowerCase())} (ρ ${fmt(c.change_rho, 2)})`).join("; ")}.`;
-  if (trendy.length) v += ` Another ${trendy.length} look strongly linked if you only compare the raw trend lines (|ρ| ≥ 0.5 in levels) but not once you compare the changes. That gap is the classic spurious correlation.`;
+  if (trendy.length) v += ` ${linked.length ? "Another" : "Yet"} ${trendy.length} look strongly linked if you only compare the raw trend lines (|ρ| ≥ 0.5 in levels) but not once you compare the changes. That gap is the classic spurious correlation.`;
   document.getElementById("verdict").innerHTML = v;
 }
 function verdict(r) {
@@ -155,13 +155,13 @@ function aiSoftware(D, c) {
 
 function reliability(D, c) {
   const M = D.metrics, L = D.labels;
-  const keys = ["claude_incidents", "github_incidents", "github_focus"].filter((k) => M[k]);
+  const keys = ["claude_incidents", "github_incidents", "github_major", "github_focus"].filter((k) => M[k]);
   if (!keys.length) { document.getElementById("c-status").outerHTML = `<p class="pending">Status page data is not available in this build.</p>`; return; }
   plot("c-status", keys.map((k, i) => line(M[k], L[k], c[i], { d: 0 })), "Incidents reported on official status pages, per month");
   const oa = M.openai_incidents;
   document.getElementById("status-note").textContent = oa && oa.length >= 8
     ? `OpenAI incidents are included in the table from our own archive (${oa.length} months).`
-    : "OpenAI's status page only shows about three months of history, so this site keeps its own archive from November 2026 onward. OpenAI joins the comparison once eight full months have been collected.";
+    : `OpenAI's status page only shows about three months of history, so this site keeps its own weekly archive (${oa ? oa.length : 0} full months so far). OpenAI joins the comparison once it reaches eight months.`;
 }
 
 function internet(D, c) {

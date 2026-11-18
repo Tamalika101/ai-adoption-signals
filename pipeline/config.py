@@ -51,13 +51,14 @@ AI_KEYWORDS = [
     "PyTorch",
     "TensorFlow",
     "Triton Inference Server",
-    "Copilot",
+    "GitHub Copilot",
+    "Microsoft 365 Copilot",
     "Model Context Protocol",
 ]
 # Same idea for the KEV catalogue (vendor / product / name fields).
 AI_KEV_PATTERN = (
-    r"\b(langflow|langchain|llamaindex|ollama|vllm|open webui|anythingllm|flowise|"
-    r"gradio|mlflow|comfyui|hugging ?face|pytorch|tensorflow|triton|copilot|ray|"
+    r"\b(?:langflow|langchain|llamaindex|ollama|vllm|open webui|anythingllm|flowise|"
+    r"gradio|mlflow|comfyui|hugging ?face|pytorch|tensorflow|triton|github copilot|365 copilot|ray|"
     r"openai|llm|model context protocol|mcp)\b"
 )
 
